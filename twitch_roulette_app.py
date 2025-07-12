@@ -21,6 +21,16 @@ def get_game_id(game_name):
         return data['data'][0]['id']
     return None
 
+# Live-Suche von Kategorien
+def search_categories(query):
+    url = 'https://api.twitch.tv/helix/search/categories'
+    params = {'query': query}
+    response = requests.get(url, headers=HEADERS, params=params)
+    data = response.json()
+    if 'data' in data:
+        return [item['name'] for item in data['data']]
+    return []
+
 # Bis zu 800 Streams holen
 def get_streams(max_viewers, game_id=None, max_pages=8):
     all_streams = []
@@ -66,10 +76,24 @@ st.title("🎲 Tamiron's Twitch Roulette")
 st.write("Finde zufällig kleine deutschsprachige Streamer auf Twitch!")
 
 max_viewers = st.number_input("🔢 Max. Zuschauer", min_value=1, value=20, step=1)
-category = st.text_input("🎮 Kategorie (optional)", placeholder="Just Chatting, Minecraft...")
+
+# 🎮 Live-Kategorie-Suche
+category_input = st.text_input("🎮 Kategorie suchen (optional)", "")
+category_choice = None
+
+if category_input:
+    matches = search_categories(category_input)
+    if matches:
+        if len(matches) == 1:
+            category_choice = matches[0]
+            st.success(f"✅ Automatisch gewählt: {category_choice}")
+        else:
+            category_choice = st.selectbox("🔍 Wähle eine Kategorie:", matches)
+    else:
+        st.info("❗ Keine Kategorie gefunden – vielleicht vertippt?")
 
 if st.button("🎲 Stream ziehen"):
-    game_id = get_game_id(category) if category else None
+    game_id = get_game_id(category_choice) if category_choice else None
     with st.spinner("Suche läuft..."):
         streams = get_streams(max_viewers, game_id)
         show_random_stream(streams)
