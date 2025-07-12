@@ -2,7 +2,7 @@ import streamlit as st
 import requests
 import random
 
-# Deine Zugangsdaten
+# === 🔐 Deine Zugangsdaten ===
 CLIENT_ID = 'ojb9ukjr8tq0p8d91ytqis7k94vduf'
 ACCESS_TOKEN = 'pnp1208zpgbsujpv9nz5fnbi4747b7'
 
@@ -11,7 +11,7 @@ HEADERS = {
     'Authorization': f'Bearer {ACCESS_TOKEN}'
 }
 
-# Twitch Game-ID holen
+# === 🎯 Twitch Game-ID holen ===
 def get_game_id(game_name):
     url = 'https://api.twitch.tv/helix/games'
     params = {'name': game_name}
@@ -21,7 +21,7 @@ def get_game_id(game_name):
         return data['data'][0]['id']
     return None
 
-# Bis zu 800 Streams holen
+# === 🔄 Streams holen ===
 def get_streams(max_viewers, game_id=None, max_pages=8):
     all_streams = []
     cursor = None
@@ -48,7 +48,7 @@ def get_streams(max_viewers, game_id=None, max_pages=8):
 
     return all_streams
 
-# Stream anzeigen
+# === 🎥 Stream anzeigen ===
 def show_random_stream(streams):
     if not streams:
         st.warning("Keine passenden Streams gefunden.")
@@ -60,49 +60,68 @@ def show_random_stream(streams):
     st.markdown(f"**🎮 Spiel:** {chosen['game_name']}")
     st.markdown(f"**👀 Zuschauer:** {chosen['viewer_count']}")
 
-# UI starten
+# === UI ===
 st.set_page_config(page_title="Twitch Roulette", layout="centered")
 st.title("🎲 Tamiron's Twitch Roulette")
-st.write("Finde zufällig kleine deutschsprachige Streamer auf Twitch!")
+st.caption("Zufällig kleine deutschsprachige Streamer entdecken!")
 
 max_viewers = st.number_input("🔢 Max. Zuschauer", min_value=1, value=20, step=1)
 
-# Live-Kategorie-Suche mit Cover
-selected_game = st.session_state.get("chosen_game", None)
+# ========== SESSION HANDLING ==========
+if "chosen_game" not in st.session_state:
+    st.session_state["chosen_game"] = None
 
-category_query = st.text_input("🎮 Kategorie suchen (z. B. 'mine'):")
+if "category_query" not in st.session_state:
+    st.session_state["category_query"] = ""
 
-if category_query:
-    url = 'https://api.twitch.tv/helix/search/categories'
-    params = {'query': category_query}
-    response = requests.get(url, headers=HEADERS, params=params)
-    data = response.json()
+# === Kategorie zurücksetzen ===
+if st.session_state["chosen_game"]:
+    st.markdown(f"✅ **Gewählte Kategorie:** *{st.session_state['chosen_game']['name']}*")
+    colA, colB = st.columns([1, 1])
+    with colA:
+        if st.button("🎲 Stream ziehen"):
+            with st.spinner("Würfle..."):
+                streams = get_streams(max_viewers, st.session_state["chosen_game"]["id"])
+                show_random_stream(streams)
+    with colB:
+        if st.button("🔁 Kategorie zurücksetzen"):
+            st.session_state["chosen_game"] = None
+            st.session_state["category_query"] = ""
 
-    if data.get("data"):
-        st.markdown("### 🔍 Gefundene Kategorien:")
-        for item in data["data"]:
-            col1, col2 = st.columns([1, 4])
-            with col1:
-                st.image(item["box_art_url"].replace("{width}", "100").replace("{height}", "140"))
-            with col2:
-                st.markdown(f"**{item['name']}**")
-                if st.button(f"✅ Wählen: {item['name']}", key=item['id']):
-                    st.session_state["chosen_game"] = {
-                        "id": item["id"],
-                        "name": item["name"]
-                    }
-                    selected_game = st.session_state["chosen_game"]
-                    st.success(f"✅ Gewählt: {selected_game['name']}")
+else:
+    # === Kategorie suchen + Auswahl
+    st.subheader("🎮 Kategorie suchen")
+    category_query = st.text_input("Suchbegriff eingeben:", value=st.session_state["category_query"])
+    st.session_state["category_query"] = category_query
+
+    if category_query:
+        url = 'https://api.twitch.tv/helix/search/categories'
+        params = {'query': category_query}
+        response = requests.get(url, headers=HEADERS, params=params)
+        data = response.json()
+
+        if data.get("data"):
+            top_matches = data["data"][:6]  # Max. 6 Kategorien anzeigen
+            for item in top_matches:
+                col1, col2 = st.columns([1, 4])
+                with col1:
+                    st.image(item["box_art_url"].replace("{width}", "100").replace("{height}", "140"))
+                with col2:
+                    st.markdown(f"**{item['name']}**")
+                    if st.button(f"✅ Wählen: {item['name']}", key=item['id']):
+                        st.session_state["chosen_game"] = {
+                            "id": item["id"],
+                            "name": item["name"]
+                        }
+                        st.success(f"✅ Kategorie gesetzt: {item['name']}")
+        else:
+            st.info("Keine passenden Kategorien gefunden.")
     else:
-        st.info("Keine passenden Kategorien gefunden.")
+        st.caption("🔍 Gib z. B. 'chat' oder 'mine' ein, um Kategorien zu finden.")
 
-# Stream starten
-if selected_game or st.button("🎲 Stream ziehen (Alle Kategorien)"):
-    game_id = selected_game["id"] if selected_game else None
-    game_name = selected_game["name"] if selected_game else None
-
-    with st.spinner("🎲 Würfle..."):
-        streams = get_streams(max_viewers, game_id)
-        if game_name:
-            st.markdown(f"🎮 **Kategorie:** {game_name}")
-        show_random_stream(streams)
+# === Fallback: Suche ohne Kategorie ===
+if not st.session_state["chosen_game"]:
+    if st.button("🎲 Stream ziehen (alle Kategorien)"):
+        with st.spinner("Würfle..."):
+            streams = get_streams(max_viewers)
+            show_random_stream(streams)
